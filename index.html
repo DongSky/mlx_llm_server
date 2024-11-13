@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Closure</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.indigo-pink.min.css">
+    <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
+    <style>
+        body {
+            font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .mdl-layout__content {
+            padding: 24px;
+            flex: 1 0 auto;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 2px 0 rgba(0,0,0,.14), 0 3px 1px -2px rgba(0,0,0,.2), 0 1px 5px 0 rgba(0,0,0,.12);
+        }
+        #chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+        }
+        .message.user {
+            justify-content: flex-end;
+        }
+        .message-content {
+            padding: 8px 12px;
+            border-radius: 18px;
+            max-width: 70%;
+        }
+        .user .message-content {
+            background-color: #E3F2FD;
+            color: #0D47A1;
+        }
+        .assistant .message-content {
+            background-color: #F5F5F5;
+            color: #333;
+        }
+        .input-container {
+            display: flex;
+            padding: 16px;
+        }
+        #user-input {
+            flex-grow: 1;
+            margin-right: 16px;
+        }
+        .button-container {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 16px 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-header">
+        <header class="mdl-layout__header">
+            <div class="mdl-layout__header-row">
+                <span class="mdl-layout-title">Closure</span>
+            </div>
+        </header>
+        <main class="mdl-layout__content">
+            <div class="chat-container">
+                <div id="chat-messages"></div>
+                <div class="mdl-textfield mdl-js-textfield">
+                    <textarea class="mdl-textfield__input" type="text" id="system-prompt" rows="3" style="width: 100%;">You are a helpful AI assistant.</textarea>
+                    <!-- Removed label -->
+                </div>
+                <div class="input-container">
+                    <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label" id="user-input">
+                        <input class="mdl-textfield__input" type="text" id="user-input-field">
+                        <label class="mdl-textfield__label" for="user-input-field">输入您的消息...</label>
+                    </div>
+                    <button class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored" onclick="sendMessage()">
+                        发送
+                    </button>
+                </div>
+                <div class="button-container">
+                    <button class="mdl-button mdl-js-button mdl-button--raised mdl-button--accent" onclick="clearContext()">
+                        清空上下文
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input-field');
+        let conversationHistory = [];
+
+        async function sendMessage() {
+            const userMessage = userInput.value.trim();
+            if (userMessage === '') return;
+
+            const systemPrompt = document.getElementById('system-prompt').value; // Get the system prompt value
+
+            addMessage('user', userMessage);
+            userInput.value = '';
+
+            try {
+                const response = await fetch('http://localhost:3301/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: "Qwen/Qwen2.5-3B-Instruct",
+                        prompt: userMessage,
+                        system: systemPrompt,
+                        context: conversationHistory.map(msg => msg.content),
+                        stream: false
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const assistantMessage = data.response;
+
+                addMessage('assistant', assistantMessage);
+                conversationHistory.push({ role: 'user', content: userMessage });
+                conversationHistory.push({ role: 'assistant', content: assistantMessage });
+            } catch (error) {
+                console.error('发生错误:', error);
+                conversationHistory.push({ role: 'user', content: userMessage });
+                addMessage('assistant', `抱歉,发生了错误: ${error.message}`);
+            }
+        }
+
+        function addMessage(role, content) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', role);
+            messageElement.innerHTML = `<div class="message-content">${content}</div>`;
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function clearContext() {
+            conversationHistory = [];
+            chatMessages.innerHTML = '';
+            addMessage('assistant', '上下文已清空。有什么我可以帮您的吗？');
+        }
+
+        userInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
